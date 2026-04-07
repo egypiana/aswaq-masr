@@ -13,6 +13,7 @@ import SEOContent from './SEOContent';
 import FAQ from './FAQ';
 import JsonLd from './JsonLd';
 import Breadcrumb from './Breadcrumb';
+import CurrencyTable from './CurrencyTable';
 
 interface CategoryPageTemplateProps {
   config: CategoryConfig;
@@ -61,6 +62,11 @@ export default function CategoryPageTemplate({ config }: CategoryPageTemplatePro
             />
           ))}
         </div>
+      )}
+
+      {/* Currency Table — shown on dollar & currencies pages */}
+      {(config.slug === 'dollar' || config.slug === 'currencies') && (
+        <CurrencyTable />
       )}
 
       {/* Embed Widget */}
