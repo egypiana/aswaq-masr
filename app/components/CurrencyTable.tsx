@@ -135,53 +135,107 @@ function MarketTab({ rates }: { rates: CurrencyRate[] }) {
 }
 
 // ── Banks tab ─────────────────────────────────────────────────
-function BanksTab({ banks }: { banks: BankRate[] }) {
+const BANK_CURRENCY_TABS = [
+  { code: 'USD' as const, label: 'دولار أمريكي', flag: '🇺🇸', buyKey: 'usdBuy' as const, sellKey: 'usdSell' as const },
+  { code: 'EUR' as const, label: 'يورو',          flag: '🇪🇺', buyKey: 'eurBuy' as const, sellKey: 'eurSell' as const },
+  { code: 'GBP' as const, label: 'إسترليني',      flag: '🇬🇧', buyKey: 'gbpBuy' as const, sellKey: 'gbpSell' as const },
+  { code: 'SAR' as const, label: 'ريال سعودي',    flag: '🇸🇦', buyKey: 'sarBuy' as const, sellKey: 'sarSell' as const },
+];
+
+function BanksTab({ banks, rates }: { banks: BankRate[]; rates: CurrencyRate[] }) {
+  const [selected, setSelected] = useState<'USD' | 'EUR' | 'GBP' | 'SAR'>('USD');
+  const tab = BANK_CURRENCY_TABS.find(t => t.code === selected)!;
+  const marketRate = rates.find(r => r.code === selected);
+  const dir = marketRate?.direction ?? 'stable';
+  const pct = marketRate?.changePercent ?? 0;
+
   return (
-    <div className="overflow-x-auto -mx-4 sm:mx-0">
-      <table className="w-full text-sm min-w-[700px]">
-        <thead>
-          <tr className="bg-navy text-white text-xs">
-            <th className="text-right px-4 py-3 font-semibold rounded-tr-lg">البنك</th>
-            <th className="text-center px-3 py-3 font-semibold" colSpan={2}>دولار 🇺🇸</th>
-            <th className="text-center px-3 py-3 font-semibold" colSpan={2}>يورو 🇪🇺</th>
-            <th className="text-center px-3 py-3 font-semibold" colSpan={2}>إسترليني 🇬🇧</th>
-            <th className="text-center px-3 py-3 font-semibold rounded-tl-lg" colSpan={2}>ريال سعودي 🇸🇦</th>
-          </tr>
-          <tr className="bg-navy/80 text-gray-300 text-xs border-t border-white/10">
-            <th className="px-4 py-1.5"></th>
-            <th className="text-center px-3 py-1.5">شراء</th>
-            <th className="text-center px-3 py-1.5">بيع</th>
-            <th className="text-center px-3 py-1.5">شراء</th>
-            <th className="text-center px-3 py-1.5">بيع</th>
-            <th className="text-center px-3 py-1.5">شراء</th>
-            <th className="text-center px-3 py-1.5">بيع</th>
-            <th className="text-center px-3 py-1.5">شراء</th>
-            <th className="text-center px-3 py-1.5">بيع</th>
-          </tr>
-        </thead>
-        <tbody>
-          {banks.map((b, i) => (
-            <tr
-              key={b.shortName}
-              className={`border-b border-gray-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors
-                ${i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/60 dark:bg-gray-800/60'}`}
-            >
-              <td className="px-4 py-3">
-                <div className="font-semibold text-gray-900 dark:text-white">{b.nameAr}</div>
-                <div className="text-xs text-gray-400 font-mono">{b.shortName}</div>
-              </td>
-              <td className="text-center px-3 py-3 text-blue-700 dark:text-blue-300 font-semibold tabular-nums">{b.usdBuy.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-orange-600 dark:text-orange-400 font-semibold tabular-nums">{b.usdSell.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-blue-700 dark:text-blue-300 font-semibold tabular-nums">{b.eurBuy.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-orange-600 dark:text-orange-400 font-semibold tabular-nums">{b.eurSell.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-blue-700 dark:text-blue-300 font-semibold tabular-nums">{b.gbpBuy.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-orange-600 dark:text-orange-400 font-semibold tabular-nums">{b.gbpSell.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-blue-700 dark:text-blue-300 font-semibold tabular-nums">{b.sarBuy.toFixed(2)}</td>
-              <td className="text-center px-3 py-3 text-orange-600 dark:text-orange-400 font-semibold tabular-nums">{b.sarSell.toFixed(2)}</td>
+    <div>
+      {/* Currency selector */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {BANK_CURRENCY_TABS.map(({ code, label, flag }) => (
+          <button
+            key={code}
+            onClick={() => setSelected(code)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all
+              ${selected === code
+                ? 'bg-navy text-white shadow-sm'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+          >
+            {flag} {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Subtitle */}
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        أسعار {tab.flag} {tab.label} مقابل الجنيه المصري في كل البنوك
+        {marketRate && (
+          <span className="mr-2 font-semibold text-gray-700 dark:text-gray-200">
+            · السعر الوسيط: {marketRate.rate.toFixed(2)} جنيه
+          </span>
+        )}
+      </p>
+
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <table className="w-full text-sm min-w-[420px]">
+          <thead>
+            <tr className="bg-navy text-white text-xs">
+              <th className="text-right px-4 py-3 font-semibold rounded-tr-lg">البنك</th>
+              <th className="text-center px-4 py-3 font-semibold">
+                <span className="flex items-center justify-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-300" />
+                  سعر الشراء
+                </span>
+              </th>
+              <th className="text-center px-4 py-3 font-semibold">
+                <span className="flex items-center justify-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-300" />
+                  سعر البيع
+                </span>
+              </th>
+              <th className="text-center px-4 py-3 font-semibold rounded-tl-lg">التغيير</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {banks.map((b, i) => {
+              const buy  = b[tab.buyKey];
+              const sell = b[tab.sellKey];
+              return (
+                <tr
+                  key={b.shortName}
+                  className={`border-b border-gray-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors
+                    ${i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/60 dark:bg-gray-800/60'}`}
+                >
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-gray-900 dark:text-white text-sm">{b.nameAr}</div>
+                    <div className="text-xs text-gray-400 font-mono">{b.shortName}</div>
+                  </td>
+                  <td className="text-center px-4 py-3">
+                    <div className="font-bold text-blue-700 dark:text-blue-300 tabular-nums text-base">{buy.toFixed(2)}</div>
+                    {pct !== 0 && (
+                      <div className={`text-xs tabular-nums mt-0.5 ${dir === 'up' ? 'text-green-600' : dir === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '●'} {Math.abs(pct).toFixed(3)}%
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-center px-4 py-3">
+                    <div className="font-bold text-orange-600 dark:text-orange-400 tabular-nums text-base">{sell.toFixed(2)}</div>
+                    {pct !== 0 && (
+                      <div className={`text-xs tabular-nums mt-0.5 ${dir === 'up' ? 'text-green-600' : dir === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '●'} {Math.abs(pct).toFixed(3)}%
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-center px-4 py-3">
+                    <ChangeBadge pct={pct} dir={dir} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -274,7 +328,7 @@ export default function CurrencyTable() {
           ) : data ? (
             tab === 'market'
               ? <MarketTab rates={data.rates} />
-              : <BanksTab banks={data.banks} />
+              : <BanksTab banks={data.banks} rates={data.rates} />
           ) : (
             <p className="text-center text-gray-400 py-8">تعذر تحميل الأسعار</p>
           )}
