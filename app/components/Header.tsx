@@ -61,7 +61,7 @@ export default function Header() {
                 <div
                   key={item.href}
                   className="relative"
-                  onMouseEnter={() => item.children && setOpenDropdown(item.href)}
+                  onMouseEnter={() => 'children' in item && setOpenDropdown(item.href)}
                   onMouseLeave={() => setOpenDropdown(null)}
                 >
                   <Link
@@ -69,15 +69,15 @@ export default function Header() {
                     className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm flex items-center gap-1"
                   >
                     {item.label}
-                    {item.children && (
+                    {'children' in item && (
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     )}
                   </Link>
-                  {item.children && openDropdown === item.href && (
+                  {'children' in item && openDropdown === item.href && (
                     <div className="absolute top-full right-0 mt-0 bg-navy border border-white/10 rounded-lg shadow-xl min-w-48 py-1 z-50">
-                      {item.children.map((child) => (
+                      {(item as typeof item & { children: { label: string; href: string }[] }).children.map((child) => (
                         <Link
                           key={child.href}
                           href={child.href}
@@ -116,13 +116,13 @@ export default function Header() {
                   <Link
                     href={item.href}
                     className="block px-3 py-2 hover:bg-white/10 rounded-lg text-sm"
-                    onClick={() => !item.children && setMobileOpen(false)}
+                    onClick={() => !('children' in item) && setMobileOpen(false)}
                   >
                     {item.label}
                   </Link>
-                  {item.children && (
+                  {'children' in item && (
                     <div className="pr-6">
-                      {item.children.map((child) => (
+                      {(item as typeof item & { children: { label: string; href: string }[] }).children.map((child) => (
                         <Link
                           key={child.href}
                           href={child.href}
