@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Prose styling for Arabic articles */
+.prose h2 {
+  border-bottom: 2px solid #D42B2B;
+  padding-bottom: 0.5rem;
+}
+
+/* Custom selection color */
+::selection {
+  background-color: rgba(212, 43, 43, 0.2);
+  color: inherit;
+}
+
+/* Smooth transitions for dark mode */
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
