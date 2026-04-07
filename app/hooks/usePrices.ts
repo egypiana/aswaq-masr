@@ -64,7 +64,7 @@ export function usePrices(category?: CategorySlug): UsePricesResult {
 
   useEffect(() => {
     fetchPrices();
-    const interval = setInterval(fetchPrices, 60000);
+    const interval = setInterval(fetchPrices, 30000);
     return () => clearInterval(interval);
   }, [fetchPrices]);
 
