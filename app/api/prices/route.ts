@@ -3,137 +3,142 @@ import { CATEGORIES, CATEGORY_SLUGS } from '@/app/lib/categories';
 import { CategorySlug, PriceUpdate } from '@/app/lib/types';
 
 // ─────────────────────────────────────────────────────────────
-// Real-time price sources (no API key required):
-//   Metals + FX  → Yahoo Finance (GC=F, SI=F, USDEGP=X …)
-//   Iron/Cement  → seeded daily variation (no public API)
-//   Fuel         → Egyptian government fixed prices
+// Data source: @fawazahmed0/currency-api (free, no API key)
+//   CDN: https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/{base}.json
+//   XAU = gold (troy oz), XAG = silver (troy oz)
+//   All prices returned directly in EGP.
+//   Updated several times per day. CDN-cached so very fast.
 // ─────────────────────────────────────────────────────────────
 
+const CDN  = 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies';
+const FB   = 'https://latest.currency-api.pages.dev/v1/currencies'; // fallback
 const TROY_OZ_GRAMS = 31.1035;
-const CACHE_TTL_MS  = 60_000; // 1 minute
+const CACHE_TTL_MS  = 5 * 60_000; // 5 minutes (API updates a few times/day)
 
-interface LiveData {
-  goldUsd:  number;
-  silverUsd: number;
-  usdEgp:   number;
-  eurEgp:   number;
-  gbpEgp:   number;
-  sarEgp:   number;
-  aedEgp:   number;
-  kwdEgp:   number;
+interface LiveRates {
+  usdEgp: number;
+  eurEgp: number;
+  gbpEgp: number;
+  sarEgp: number;
+  aedEgp: number;
+  kwdEgp: number;
+  goldOzEgp: number;   // 1 troy oz of gold in EGP
+  silverOzEgp: number; // 1 troy oz of silver in EGP
   fetchedAt: number;
 }
 
-let liveCache: LiveData | null = null;
+let ratesCache: LiveRates | null = null;
 
-// ─── Yahoo Finance fetch ───────────────────────────────────────
-async function fetchLiveData(): Promise<LiveData> {
+// ─── Fetch one currency JSON with CDN → fallback ───────────────
+async function fetchCurrency(base: string): Promise<Record<string, number>> {
+  for (const root of [CDN, FB]) {
+    try {
+      const res = await fetch(`${root}/${base}.json`, {
+        next: { revalidate: 300 },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      return data[base] as Record<string, number>;
+    } catch { /* try fallback */ }
+  }
+  throw new Error(`Could not fetch ${base} rates`);
+}
+
+// ─── Fetch all live rates (cached 5 min) ──────────────────────
+async function fetchLiveRates(): Promise<LiveRates> {
   const now = Date.now();
-  if (liveCache && now - liveCache.fetchedAt < CACHE_TTL_MS) {
-    return liveCache;
-  }
+  if (ratesCache && now - ratesCache.fetchedAt < CACHE_TTL_MS) return ratesCache;
 
-  const symbols = ['GC=F', 'SI=F', 'USDEGP=X', 'EUREGP=X', 'GBPEGP=X', 'SAREGP=X', 'AEDEGP=X', 'KWDEGP=X'];
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}&lang=en&region=US`;
+  // Parallel fetch: USD rates, gold (XAU), silver (XAG)
+  const [usd, xau, xag] = await Promise.all([
+    fetchCurrency('usd'),
+    fetchCurrency('xau'),
+    fetchCurrency('xag'),
+  ]);
 
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot/1.0)' },
-    next: { revalidate: 60 },
-  });
+  // Derived cross-rates: X/EGP = usd.egp / usd.X
+  const cross = (code: string) => usd.egp / (usd[code] ?? 1);
 
-  if (!res.ok) throw new Error(`Yahoo Finance error ${res.status}`);
-
-  const json = await res.json();
-  const quotes: Record<string, number> = {};
-  for (const q of json.quoteResponse?.result ?? []) {
-    quotes[q.symbol] = q.regularMarketPrice ?? q.ask ?? 0;
-  }
-
-  const data: LiveData = {
-    goldUsd:   quotes['GC=F']      ?? 0,
-    silverUsd: quotes['SI=F']      ?? 0,
-    usdEgp:    quotes['USDEGP=X']  ?? 0,
-    eurEgp:    quotes['EUREGP=X']  ?? 0,
-    gbpEgp:    quotes['GBPEGP=X']  ?? 0,
-    sarEgp:    quotes['SAREGP=X']  ?? 0,
-    aedEgp:    quotes['AEDEGP=X']  ?? 0,
-    kwdEgp:    quotes['KWDEGP=X']  ?? 0,
-    fetchedAt: now,
+  const rates: LiveRates = {
+    usdEgp:      +usd.egp.toFixed(4),
+    eurEgp:      +cross('eur').toFixed(4),
+    gbpEgp:      +cross('gbp').toFixed(4),
+    sarEgp:      +cross('sar').toFixed(4),
+    aedEgp:      +cross('aed').toFixed(4),
+    kwdEgp:      +cross('kwd').toFixed(4),
+    goldOzEgp:   xau.egp,    // price of 1 troy oz in EGP
+    silverOzEgp: xag.egp,    // price of 1 troy oz in EGP
+    fetchedAt:   now,
   };
 
-  // Only cache if we got valid data
-  if (data.goldUsd > 0 && data.usdEgp > 0) liveCache = data;
-  return data;
+  ratesCache = rates;
+  return rates;
 }
 
-// ─── Price builders per category ──────────────────────────────
-function buildGold(d: LiveData): Record<string, number> {
-  const g24 = (d.goldUsd / TROY_OZ_GRAMS) * d.usdEgp;
+// ─── Price builders ────────────────────────────────────────────
+function buildGold(r: LiveRates): Record<string, number> {
+  const g = r.goldOzEgp / TROY_OZ_GRAMS; // EGP per gram, 24k
   return {
-    'gold-24':    +g24.toFixed(0),
-    'gold-21':    +(g24 * (21/24)).toFixed(0),
-    'gold-18':    +(g24 * (18/24)).toFixed(0),
-    'gold-14':    +(g24 * (14/24)).toFixed(0),
-    'gold-pound': +(g24 * (21/24) * 8).toFixed(0),    // 8 g, 21k
-    'gold-ounce': +(d.goldUsd * d.usdEgp).toFixed(0), // 1 troy oz
+    'gold-24':    Math.round(g),
+    'gold-21':    Math.round(g * (21 / 24)),
+    'gold-18':    Math.round(g * (18 / 24)),
+    'gold-14':    Math.round(g * (14 / 24)),
+    'gold-pound': Math.round(g * (21 / 24) * 8),  // Egyptian pound = 8 g of 21k
+    'gold-ounce': Math.round(r.goldOzEgp),
   };
 }
 
-function buildSilver(d: LiveData): Record<string, number> {
-  const s999 = (d.silverUsd / TROY_OZ_GRAMS) * d.usdEgp;
+function buildSilver(r: LiveRates): Record<string, number> {
+  const s = r.silverOzEgp / TROY_OZ_GRAMS;
   return {
-    'silver-999': +s999.toFixed(2),
-    'silver-925': +(s999 * 0.925).toFixed(2),
-    'silver-800': +(s999 * 0.80).toFixed(2),
+    'silver-999': +s.toFixed(2),
+    'silver-925': +(s * 0.925).toFixed(2),
+    'silver-800': +(s * 0.80).toFixed(2),
   };
 }
 
-function buildDollar(d: LiveData): Record<string, number> {
-  const spread = 0.15; // ~15 pt bank buy/sell spread
+function buildDollar(r: LiveRates): Record<string, number> {
+  const spread = 0.20;
   return {
-    'dollar-cbe-buy':  +(d.usdEgp - spread).toFixed(2),
-    'dollar-cbe-sell': +(d.usdEgp + spread).toFixed(2),
-    'dollar-nbe-buy':  +(d.usdEgp - spread * 0.8).toFixed(2),
-    'dollar-nbe-sell': +(d.usdEgp + spread * 0.8).toFixed(2),
-    'eur': +d.eurEgp.toFixed(2),
-    'gbp': +d.gbpEgp.toFixed(2),
-    'sar': +d.sarEgp.toFixed(2),
-    'aed': +d.aedEgp.toFixed(2),
-    'kwd': +d.kwdEgp.toFixed(2),
+    'dollar-cbe-buy':  +(r.usdEgp - spread).toFixed(2),
+    'dollar-cbe-sell': +(r.usdEgp + spread).toFixed(2),
+    'dollar-nbe-buy':  +(r.usdEgp - spread * 0.7).toFixed(2),
+    'dollar-nbe-sell': +(r.usdEgp + spread * 0.7).toFixed(2),
+    'eur': +r.eurEgp.toFixed(2),
+    'gbp': +r.gbpEgp.toFixed(2),
+    'sar': +r.sarEgp.toFixed(2),
+    'aed': +r.aedEgp.toFixed(2),
+    'kwd': +r.kwdEgp.toFixed(2),
   };
 }
 
-function buildCurrencies(d: LiveData): Record<string, number> {
-  return buildDollar(d); // Same underlying data
-}
-
-// Iron: seed daily variation ±1% around realistic Egyptian prices
+// Iron: daily-seeded variation ±1% around realistic Egyptian market prices
 function buildIron(): Record<string, number> {
-  const dayIndex = Math.floor(Date.now() / 86_400_000);
-  const seed = (id: number) => Math.sin(id * 9301 + dayIndex * 49297) * 0.01;
+  const d = Math.floor(Date.now() / 86_400_000);
+  const v = (id: number) => 1 + Math.sin(id * 9301 + d * 49297) * 0.01;
   return {
-    'iron-ezz':      Math.round(13500 * (1 + seed(1))),
-    'iron-beshay':   Math.round(13200 * (1 + seed(2))),
-    'iron-suez':     Math.round(13000 * (1 + seed(3))),
-    'iron-masryeen': Math.round(12800 * (1 + seed(4))),
-    'iron-attal':    Math.round(12600 * (1 + seed(5))),
+    'iron-ezz':      Math.round(13500 * v(1)),
+    'iron-beshay':   Math.round(13200 * v(2)),
+    'iron-suez':     Math.round(13000 * v(3)),
+    'iron-masryeen': Math.round(12800 * v(4)),
+    'iron-attal':    Math.round(12600 * v(5)),
   };
 }
 
-// Cement: seed daily variation ±0.5%
+// Cement: daily-seeded variation ±0.5%
 function buildCement(): Record<string, number> {
-  const dayIndex = Math.floor(Date.now() / 86_400_000);
-  const seed = (id: number) => Math.sin(id * 6271 + dayIndex * 28411) * 0.005;
+  const d = Math.floor(Date.now() / 86_400_000);
+  const v = (id: number) => 1 + Math.sin(id * 6271 + d * 28411) * 0.005;
   return {
-    'cement-suez':    Math.round(2200 * (1 + seed(1))),
-    'cement-arabi':   Math.round(2150 * (1 + seed(2))),
-    'cement-lafarge': Math.round(2250 * (1 + seed(3))),
-    'cement-sinai':   Math.round(2100 * (1 + seed(4))),
-    'cement-white':   Math.round(4800 * (1 + seed(5))),
+    'cement-suez':    Math.round(2200 * v(1)),
+    'cement-arabi':   Math.round(2150 * v(2)),
+    'cement-lafarge': Math.round(2250 * v(3)),
+    'cement-sinai':   Math.round(2100 * v(4)),
+    'cement-white':   Math.round(4800 * v(5)),
   };
 }
 
-// Fuel: Egyptian government fixed prices (updated manually when gov. changes them)
+// Fuel: Egyptian government-regulated fixed prices
 function buildFuel(): Record<string, number> {
   return {
     'fuel-80':     10.00,
@@ -144,86 +149,55 @@ function buildFuel(): Record<string, number> {
   };
 }
 
-// ─── Previous-price cache (for change calculation) ─────────────
-interface PrevCache { price: number; at: number }
-const prevCache = new Map<string, PrevCache>();
+// ─── Previous-price tracker for change arrows ──────────────────
+const prevCache = new Map<string, number>();
 
-function buildUpdates(
-  category: CategorySlug,
-  prices: Record<string, number>,
-): PriceUpdate[] {
+function buildUpdates(category: CategorySlug, prices: Record<string, number>): PriceUpdate[] {
   const config = CATEGORIES[category];
   const now = Date.now();
 
   return config.items.map((item) => {
-    const newPrice = prices[item.id] ?? item.basePrice;
-    const key = `${category}-${item.id}`;
-    const prev = prevCache.get(key);
+    const price = prices[item.id] ?? item.basePrice;
+    const key   = `${category}-${item.id}`;
+    const prev  = prevCache.get(key) ?? price;
+    prevCache.set(key, price);
 
-    // Store new snapshot when price differs
-    let previousPrice = prev?.price ?? newPrice;
-    if (!prev || Math.abs(newPrice - prev.price) / prev.price > 0.0001) {
-      if (prev) previousPrice = prev.price;
-      prevCache.set(key, { price: newPrice, at: now });
-    }
-
-    const change = +(newPrice - previousPrice).toFixed(2);
-    const changePercent = previousPrice
-      ? +((change / previousPrice) * 100).toFixed(2)
-      : 0;
+    const change        = +(price - prev).toFixed(2);
+    const changePercent = prev ? +((change / prev) * 100).toFixed(2) : 0;
 
     return {
-      id: item.id,
-      nameAr: item.nameAr,
-      unit: item.unit,
-      icon: item.icon,
-      price: newPrice,
-      previousPrice,
-      change,
-      changePercent,
+      id: item.id, nameAr: item.nameAr, unit: item.unit, icon: item.icon,
+      price, previousPrice: prev,
+      change, changePercent,
       direction: change > 0 ? 'up' : change < 0 ? 'down' : 'stable',
       timestamp: new Date(now).toISOString(),
     } as PriceUpdate;
   });
 }
 
-// ─── Fallback (when Yahoo Finance is unavailable) ──────────────
 function buildFallback(category: CategorySlug): PriceUpdate[] {
-  const config = CATEGORIES[category];
-  return config.items.map((item) => ({
-    id: item.id,
-    nameAr: item.nameAr,
-    unit: item.unit,
-    icon: item.icon,
-    price: item.basePrice,
-    previousPrice: item.basePrice,
-    change: 0,
-    changePercent: 0,
-    direction: 'stable' as const,
+  return CATEGORIES[category].items.map((item) => ({
+    id: item.id, nameAr: item.nameAr, unit: item.unit, icon: item.icon,
+    price: item.basePrice, previousPrice: item.basePrice,
+    change: 0, changePercent: 0, direction: 'stable' as const,
     timestamp: new Date().toISOString(),
   }));
 }
 
 // ─── Route handler ─────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const category = searchParams.get('category') as CategorySlug | null;
+  const category = new URL(request.url).searchParams.get('category') as CategorySlug | null;
 
-  let live: LiveData | null = null;
-  try {
-    live = await fetchLiveData();
-  } catch {
-    // Use fallback / cached data on error
-    live = liveCache;
-  }
+  let rates: LiveRates | null = null;
+  try { rates = await fetchLiveRates(); } catch { rates = ratesCache; }
 
   function getPrices(slug: CategorySlug): Record<string, number> {
-    if (!live || live.goldUsd === 0) return {};
+    if (!rates) return {};
     switch (slug) {
-      case 'gold':       return buildGold(live);
-      case 'silver':     return buildSilver(live);
-      case 'dollar':     return buildDollar(live);
-      case 'currencies': return buildCurrencies(live);
+      case 'gold':       return buildGold(rates);
+      case 'silver':     return buildSilver(rates);
+      case 'dollar':
+      case 'currencies': return buildDollar(rates);
       case 'iron':       return buildIron();
       case 'cement':     return buildCement();
       case 'fuel':       return buildFuel();
@@ -231,30 +205,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  function getUpdates(slug: CategorySlug): PriceUpdate[] {
-    const prices = getPrices(slug);
-    if (Object.keys(prices).length === 0) return buildFallback(slug);
-    return buildUpdates(slug, prices);
-  }
+  const getUpdates = (slug: CategorySlug): PriceUpdate[] => {
+    const p = getPrices(slug);
+    return Object.keys(p).length ? buildUpdates(slug, p) : buildFallback(slug);
+  };
 
   const lastUpdated = new Date().toISOString();
+  const headers = { 'Cache-Control': 'no-store' };
 
   if (category) {
-    if (!CATEGORY_SLUGS.includes(category)) {
+    if (!CATEGORY_SLUGS.includes(category))
       return NextResponse.json({ error: 'فئة غير صالحة' }, { status: 400 });
-    }
-    return NextResponse.json(
-      { category, items: getUpdates(category), lastUpdated },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+    return NextResponse.json({ category, items: getUpdates(category), lastUpdated }, { headers });
   }
 
   const categories: Record<string, PriceUpdate[]> = {};
-  for (const slug of CATEGORY_SLUGS) {
-    categories[slug] = getUpdates(slug);
-  }
-  return NextResponse.json(
-    { categories, lastUpdated },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+  for (const slug of CATEGORY_SLUGS) categories[slug] = getUpdates(slug);
+  return NextResponse.json({ categories, lastUpdated }, { headers });
 }
