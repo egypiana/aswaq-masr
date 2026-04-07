@@ -1146,7 +1146,10 @@ export const NAV_ITEMS = [
     href: '/dollar',
     children: [
       { label: 'سعر الدولار اليوم', href: '/dollar' },
-      { label: 'أسعار العملات', href: '/currencies' },
+      { label: 'سعر اليورو اليوم', href: '/euro' },
+      { label: 'سعر الريال السعودي', href: '/sar' },
+      { label: 'سعر الإسترليني', href: '/gbp' },
+      { label: 'جدول أسعار العملات', href: '/currencies' },
     ],
   },
   {

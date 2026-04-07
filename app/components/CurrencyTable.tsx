@@ -9,16 +9,23 @@ interface CurrencyData {
   lastUpdated: string;
 }
 
+export type BankCurrencyCode = 'USD' | 'EUR' | 'GBP' | 'SAR';
+
+interface CurrencyTableProps {
+  initialTab?: 'market' | 'banks';
+  initialCurrency?: BankCurrencyCode;
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 function Arrow({ dir }: { dir: 'up' | 'down' | 'stable' }) {
-  if (dir === 'up')   return <span className="text-up text-xs">▲</span>;
-  if (dir === 'down') return <span className="text-down text-xs">▼</span>;
-  return <span className="text-gray-400 text-xs">●</span>;
+  if (dir === 'up')   return <span className="text-green-600 text-xs font-bold">▲</span>;
+  if (dir === 'down') return <span className="text-red-500 text-xs font-bold">▼</span>;
+  return <span className="text-gray-400 text-xs">—</span>;
 }
 
 function ChangeBadge({ pct, dir }: { pct: number; dir: 'up' | 'down' | 'stable' }) {
-  const bg = dir === 'up' ? 'bg-green-100 text-up dark:bg-green-900/30'
-           : dir === 'down' ? 'bg-red-100 text-down dark:bg-red-900/30'
+  const bg = dir === 'up' ? 'bg-green-100 text-green-700 dark:bg-green-900/30'
+           : dir === 'down' ? 'bg-red-100 text-red-600 dark:bg-red-900/30'
            : 'bg-gray-100 text-gray-500 dark:bg-gray-800';
   const sign = dir === 'up' ? '+' : '';
   return (
@@ -86,7 +93,6 @@ function MarketTab({ rates }: { rates: CurrencyRate[] }) {
               className={`border-b border-gray-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors
                 ${i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/60 dark:bg-gray-800/60'}`}
             >
-              {/* Currency name */}
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xl leading-none">{r.flag}</span>
@@ -96,33 +102,28 @@ function MarketTab({ rates }: { rates: CurrencyRate[] }) {
                   </div>
                 </div>
               </td>
-              {/* Mid rate */}
               <td className="text-center px-4 py-3 font-bold text-gray-900 dark:text-white tabular-nums">
                 {r.rate.toFixed(4)}
               </td>
-              {/* Buy */}
               <td className="text-center px-4 py-3">
                 <span className="inline-block bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded font-semibold tabular-nums">
                   {r.buyRate.toFixed(2)}
                 </span>
               </td>
-              {/* Sell */}
               <td className="text-center px-4 py-3">
                 <span className="inline-block bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 px-2 py-1 rounded font-semibold tabular-nums">
                   {r.sellRate.toFixed(2)}
                 </span>
               </td>
-              {/* Change value */}
               <td className="text-center px-4 py-3">
                 <div className="flex items-center justify-center gap-1">
                   <Arrow dir={r.direction} />
                   <span className={`font-semibold tabular-nums text-sm
-                    ${r.direction === 'up' ? 'text-up' : r.direction === 'down' ? 'text-down' : 'text-gray-400'}`}>
+                    ${r.direction === 'up' ? 'text-green-600' : r.direction === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
                     {r.change === 0 ? '0.00' : (r.change > 0 ? '+' : '') + r.change.toFixed(4)}
                   </span>
                 </div>
               </td>
-              {/* Change % badge */}
               <td className="text-center px-4 py-3">
                 <ChangeBadge pct={r.changePercent} dir={r.direction} />
               </td>
@@ -142,15 +143,37 @@ const BANK_CURRENCY_TABS = [
   { code: 'SAR' as const, label: 'ريال سعودي',    flag: '🇸🇦', buyKey: 'sarBuy' as const, sellKey: 'sarSell' as const },
 ];
 
-function BanksTab({ banks, rates }: { banks: BankRate[]; rates: CurrencyRate[] }) {
-  const [selected, setSelected] = useState<'USD' | 'EUR' | 'GBP' | 'SAR'>('USD');
+function BanksTab({
+  banks, rates, lastUpdated, initialCurrency = 'USD',
+}: {
+  banks: BankRate[];
+  rates: CurrencyRate[];
+  lastUpdated: string;
+  initialCurrency?: BankCurrencyCode;
+}) {
+  const [selected, setSelected] = useState<BankCurrencyCode>(initialCurrency);
   const tab = BANK_CURRENCY_TABS.find(t => t.code === selected)!;
   const marketRate = rates.find(r => r.code === selected);
   const dir = marketRate?.direction ?? 'stable';
   const pct = marketRate?.changePercent ?? 0;
 
+  const updatedTime = new Date(lastUpdated).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  const updatedDate = new Date(lastUpdated).toLocaleDateString('ar-EG', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
   return (
     <div>
+      {/* Title */}
+      <div className="mb-4">
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">
+          أسعار صرف {tab.flag} {tab.label} الآن مقابل الجنيه في كل البنوك
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          هذه الأسعار بتوقيت {updatedTime}. اضغط على <strong>تحديث</strong> لعرض آخر الأسعار.
+          <br />
+          <em>*التغيرات محسوبة على أساس سعر إغلاق اليوم السابق.</em>
+        </p>
+      </div>
+
       {/* Currency selector */}
       <div className="flex gap-2 mb-4 flex-wrap">
         {BANK_CURRENCY_TABS.map(({ code, label, flag }) => (
@@ -167,34 +190,14 @@ function BanksTab({ banks, rates }: { banks: BankRate[]; rates: CurrencyRate[] }
         ))}
       </div>
 
-      {/* Subtitle */}
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        أسعار {tab.flag} {tab.label} مقابل الجنيه المصري في كل البنوك
-        {marketRate && (
-          <span className="mr-2 font-semibold text-gray-700 dark:text-gray-200">
-            · السعر الوسيط: {marketRate.rate.toFixed(2)} جنيه
-          </span>
-        )}
-      </p>
-
       <div className="overflow-x-auto -mx-4 sm:mx-0">
-        <table className="w-full text-sm min-w-[420px]">
+        <table className="w-full text-sm min-w-[480px]">
           <thead>
             <tr className="bg-navy text-white text-xs">
               <th className="text-right px-4 py-3 font-semibold rounded-tr-lg">البنك</th>
-              <th className="text-center px-4 py-3 font-semibold">
-                <span className="flex items-center justify-center gap-1">
-                  <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-300" />
-                  سعر الشراء
-                </span>
-              </th>
-              <th className="text-center px-4 py-3 font-semibold">
-                <span className="flex items-center justify-center gap-1">
-                  <span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-300" />
-                  سعر البيع
-                </span>
-              </th>
-              <th className="text-center px-4 py-3 font-semibold rounded-tl-lg">التغيير</th>
+              <th className="text-center px-4 py-3 font-semibold">سعر الشراء</th>
+              <th className="text-center px-4 py-3 font-semibold">سعر البيع</th>
+              <th className="text-center px-3 py-3 font-semibold hidden sm:table-cell rounded-tl-lg">آخر تحديث</th>
             </tr>
           </thead>
           <tbody>
@@ -211,24 +214,48 @@ function BanksTab({ banks, rates }: { banks: BankRate[]; rates: CurrencyRate[] }
                     <div className="font-semibold text-gray-900 dark:text-white text-sm">{b.nameAr}</div>
                     <div className="text-xs text-gray-400 font-mono">{b.shortName}</div>
                   </td>
+                  {/* Buy */}
                   <td className="text-center px-4 py-3">
-                    <div className="font-bold text-blue-700 dark:text-blue-300 tabular-nums text-base">{buy.toFixed(2)}</div>
-                    {pct !== 0 && (
-                      <div className={`text-xs tabular-nums mt-0.5 ${dir === 'up' ? 'text-green-600' : dir === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
-                        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '●'} {Math.abs(pct).toFixed(3)}%
+                    <div className="flex items-center justify-center gap-2">
+                      <div className={`flex w-7 h-7 items-center justify-center rounded
+                        ${dir === 'up' ? 'bg-green-100' : dir === 'down' ? 'bg-red-100' : 'bg-gray-100'}`}>
+                        <Arrow dir={dir} />
                       </div>
-                    )}
-                  </td>
-                  <td className="text-center px-4 py-3">
-                    <div className="font-bold text-orange-600 dark:text-orange-400 tabular-nums text-base">{sell.toFixed(2)}</div>
-                    {pct !== 0 && (
-                      <div className={`text-xs tabular-nums mt-0.5 ${dir === 'up' ? 'text-green-600' : dir === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
-                        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '●'} {Math.abs(pct).toFixed(3)}%
+                      <div className="flex flex-col items-start">
+                        <span className="font-bold text-gray-900 dark:text-white tabular-nums">{buy.toFixed(2)}</span>
+                        {pct !== 0 && (
+                          <span className={`text-xs tabular-nums font-medium
+                            ${dir === 'up' ? 'text-green-600' : dir === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                            {Math.abs(pct).toFixed(3)}%
+                          </span>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </td>
+                  {/* Sell */}
                   <td className="text-center px-4 py-3">
-                    <ChangeBadge pct={pct} dir={dir} />
+                    <div className="flex items-center justify-center gap-2">
+                      <div className={`flex w-7 h-7 items-center justify-center rounded
+                        ${dir === 'up' ? 'bg-green-100' : dir === 'down' ? 'bg-red-100' : 'bg-gray-100'}`}>
+                        <Arrow dir={dir} />
+                      </div>
+                      <div className="flex flex-col items-start">
+                        <span className="font-bold text-gray-900 dark:text-white tabular-nums">{sell.toFixed(2)}</span>
+                        {pct !== 0 && (
+                          <span className={`text-xs tabular-nums font-medium
+                            ${dir === 'up' ? 'text-green-600' : dir === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                            {Math.abs(pct).toFixed(3)}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  {/* Last updated */}
+                  <td className="text-center px-3 py-3 hidden sm:table-cell">
+                    <div className="flex flex-col items-center text-xs text-gray-500 dark:text-gray-400">
+                      <span className="font-mono">{updatedTime}</span>
+                      <span className="font-mono text-gray-400">{updatedDate}</span>
+                    </div>
                   </td>
                 </tr>
               );
@@ -241,11 +268,12 @@ function BanksTab({ banks, rates }: { banks: BankRate[]; rates: CurrencyRate[] }
 }
 
 // ── Main component ────────────────────────────────────────────
-export default function CurrencyTable() {
-  const [tab, setTab]   = useState<'market' | 'banks'>('market');
-  const [data, setData] = useState<CurrencyData | null>(null);
+export default function CurrencyTable({ initialTab = 'market', initialCurrency = 'USD' }: CurrencyTableProps) {
+  const [tab, setTab]       = useState<'market' | 'banks'>(initialTab);
+  const [data, setData]     = useState<CurrencyData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [origin, setOrigin]   = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [origin, setOrigin] = useState('');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -256,6 +284,12 @@ export default function CurrencyTable() {
       setLoading(false);
     } catch { /* silent */ }
   }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -270,7 +304,6 @@ export default function CurrencyTable() {
 
   return (
     <section className="max-w-7xl mx-auto px-4 py-8">
-      {/* Card */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
 
         {/* Header */}
@@ -279,13 +312,23 @@ export default function CurrencyTable() {
             <h2 className="text-lg font-bold text-white">أسعار صرف العملات اليوم</h2>
             <p className="text-gray-300 text-xs mt-0.5">مقابل الجنيه المصري • المصدر: السوق الفوري</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {time && (
               <div className="flex items-center gap-1.5 text-gray-300 text-xs">
                 <LiveDot />
                 <span>آخر تحديث: {time}</span>
               </div>
             )}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white text-sm font-bold px-4 py-2 rounded-full transition-colors"
+            >
+              <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              تحديث
+            </button>
           </div>
         </div>
 
@@ -304,15 +347,14 @@ export default function CurrencyTable() {
             </button>
           ))}
 
-          {/* Legend */}
           <div className="mr-auto flex items-center gap-4 px-4 text-xs text-gray-400 self-center">
             <span className="flex items-center gap-1">
               <span className="inline-block w-3 h-3 rounded bg-blue-100 border border-blue-200" />
-              سعر الشراء
+              شراء
             </span>
             <span className="flex items-center gap-1">
               <span className="inline-block w-3 h-3 rounded bg-orange-100 border border-orange-200" />
-              سعر البيع
+              بيع
             </span>
           </div>
         </div>
@@ -322,13 +364,18 @@ export default function CurrencyTable() {
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-12 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
+                <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
               ))}
             </div>
           ) : data ? (
             tab === 'market'
               ? <MarketTab rates={data.rates} />
-              : <BanksTab banks={data.banks} rates={data.rates} />
+              : <BanksTab
+                  banks={data.banks}
+                  rates={data.rates}
+                  lastUpdated={data.lastUpdated}
+                  initialCurrency={initialCurrency}
+                />
           ) : (
             <p className="text-center text-gray-400 py-8">تعذر تحميل الأسعار</p>
           )}

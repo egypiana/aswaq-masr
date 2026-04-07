@@ -65,7 +65,10 @@ export default function CategoryPageTemplate({ config }: CategoryPageTemplatePro
       )}
 
       {/* Currency Table — shown on dollar & currencies pages */}
-      {(config.slug === 'dollar' || config.slug === 'currencies') && (
+      {config.slug === 'dollar' && (
+        <CurrencyTable initialTab="banks" initialCurrency="USD" />
+      )}
+      {config.slug === 'currencies' && (
         <CurrencyTable />
       )}
 
