@@ -14,6 +14,7 @@ import FAQ from './FAQ';
 import JsonLd from './JsonLd';
 import Breadcrumb from './Breadcrumb';
 import CurrencyTable from './CurrencyTable';
+import BankRatesTable from './BankRatesTable';
 
 interface CategoryPageTemplateProps {
   config: CategoryConfig;
@@ -66,7 +67,7 @@ export default function CategoryPageTemplate({ config }: CategoryPageTemplatePro
 
       {/* Currency Table — shown on dollar & currencies pages */}
       {config.slug === 'dollar' && (
-        <CurrencyTable initialTab="banks" initialCurrency="USD" />
+        <BankRatesTable currency="USD" />
       )}
       {config.slug === 'currencies' && (
         <CurrencyTable />

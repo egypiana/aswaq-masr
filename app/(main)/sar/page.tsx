@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import CurrencyTable from '@/app/components/CurrencyTable';
+import BankRatesTable from '@/app/components/BankRatesTable';
 import Breadcrumb from '@/app/components/Breadcrumb';
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default function SarPage() {
       <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
         أسعار صرف الريال السعودي مقابل الجنيه المصري — شراء وبيع في كل البنوك
       </p>
-      <CurrencyTable initialTab="banks" initialCurrency="SAR" />
+      <BankRatesTable currency="SAR" />
     </div>
   );
 }
