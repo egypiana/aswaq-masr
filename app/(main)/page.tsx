@@ -5,6 +5,7 @@ import { CATEGORIES, CATEGORY_SLUGS } from '@/app/lib/categories';
 import { usePrices } from '@/app/hooks/usePrices';
 import { formatPrice, getDirectionArrow, getDirectionColor } from '@/app/lib/utils';
 import PriceTicker from '@/app/components/PriceTicker';
+import CurrencyTable from '@/app/components/CurrencyTable';
 
 function CategoryOverviewCard({ slug }: { slug: string }) {
   const config = CATEGORIES[slug as keyof typeof CATEGORIES];
@@ -79,6 +80,9 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Currency Table */}
+      <CurrencyTable />
 
       {/* About Section */}
       <section className="max-w-7xl mx-auto px-4 py-8">
